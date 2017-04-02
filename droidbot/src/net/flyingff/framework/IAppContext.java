@@ -1,10 +1,10 @@
 package net.flyingff.framework;
 
-import java.awt.image.BufferedImage;
 
 public interface IAppContext {
+	public static final String STARTER = "STARTER", PULSESUPPLIER = "PULSESUPPLIER";
 	public <T> T getServices(Class<? super T> clazz);
 	public <T> void registService(Class<? super T> clazz, T obj);
 	
-	public BufferedImage getScreen();
+	public <T> T getPulse();
 }

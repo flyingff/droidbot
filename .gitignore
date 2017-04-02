@@ -1,7 +1,7 @@
-/bin/
-/.classpath
-/.project
-/.settings/
-/Tess4J-3.3.1_src.zip
+droidbot/bin/
+droidbot/.classpath
+droidbot/.project
+droidbot/.settings/
+droidbot/Tess4J-3.3.1_src.zip
 
 .idea

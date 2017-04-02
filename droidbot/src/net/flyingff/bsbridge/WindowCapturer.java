@@ -19,7 +19,9 @@ import com.sun.jna.platform.win32.WinError;
 import com.sun.jna.platform.win32.WinGDI;
 import com.sun.jna.platform.win32.WinGDI.BITMAPINFO;
 
-public class WindowCapturer {
+import net.flyingff.framework.IPulseSupplier;
+
+public class WindowCapturer implements IPulseSupplier{
 	private static final User32 u32 = User32.INSTANCE;
 	private static final GDI32 g32 = GDI32.INSTANCE;
 	private BufferedImage image;
@@ -185,5 +187,18 @@ public class WindowCapturer {
 		try {
 			Thread.sleep(3000);
 		} catch (InterruptedException e) { }
+	}
+	@Override
+	public Object getOne() {
+		return image;
+	}
+	
+	@Override
+	@SuppressWarnings("unchecked")
+	public void getAtDesireRate(int millseconds, Consumer<Object> listener) {
+		System.out.println("Log. Waiting for window...");
+		waitForWindow();
+		System.out.println("Log. Window detected.");
+		intervalCap((long)millseconds, (Consumer<BufferedImage>)(Object)listener);
 	}
 }

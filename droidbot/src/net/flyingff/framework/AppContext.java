@@ -1,6 +1,5 @@
 package net.flyingff.framework;
 
-import java.awt.image.BufferedImage;
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -12,18 +11,19 @@ import java.util.Properties;
 import javax.inject.Inject;
 import javax.inject.Named;
 
-import net.flyingff.bsbridge.WindowCapturer;
 import net.flyingff.framework.fsm.AbstractFinateStateMachine;
 
 public class AppContext implements IAppContext {
-	public static final String STARTER = "STARTER";
 	private Map<String, Class<? extends AbstractFinateStateMachine>> fsmClasses = new HashMap<>();
 	private Map<Class<?>, Object> servicesByType = new HashMap<>();
 	private Map<String, Object> servicesByName = new HashMap<>();
 	private Deque<AbstractFinateStateMachine> fsmStack = new ArrayDeque<>();
 	
-	private WindowCapturer capturer;
+	private IPulseSupplier supplier;
+	private String supplierName;
 	
+	private Object pulse;
+
 	public AppContext() {
 		Properties pFSM = new Properties();
 		String starter = null;
@@ -33,6 +33,9 @@ public class AppContext implements IAppContext {
 				String name = (String) o;
 				if(STARTER.equals(name)) {
 					starter = pFSM.getProperty(name);
+					continue;
+				} else if (PULSESUPPLIER.equals(name)) {
+					supplierName = pFSM.getProperty(name);
 					continue;
 				}
 				String className = pFSM.getProperty(name);
@@ -49,7 +52,9 @@ public class AppContext implements IAppContext {
 		if(starter == null) {
 			throw new RuntimeException("Need a starter");
 		}
-		
+		if(supplierName == null) {
+			throw new RuntimeException("Need a pulse supplier");
+		}
 		fsmStack.push(newFSM(starter));
 	}
 	
@@ -104,23 +109,26 @@ public class AppContext implements IAppContext {
 		}
 	}
 	
-	private BufferedImage screen;
 	public void start() {
-		if(capturer != null) {
+		if(supplier != null) {
 			throw new IllegalStateException();
 		}
 		// wait for window
-		WindowCapturer.waitForWindow();
-		
+		try {
+			supplier = (IPulseSupplier) Class.forName(supplierName).newInstance();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to load pulse supplier", e);
+		}
 		// start capture
-		capturer = new WindowCapturer();
-		capturer.intervalCap(40, img->{
-			screen = img;
+		supplier.getAtDesireRate(40, p->{
+			pulse = p;
 			active();
 		});
 	}
-	public BufferedImage getScreen() {
-		return screen;
+	
+	@SuppressWarnings("unchecked")
+	public <T> T getPulse() {
+		return (T) pulse;
 	}
 	public void active() {
 		boolean running = true;
@@ -166,13 +174,11 @@ public class AppContext implements IAppContext {
 	
 	private void terminate() {
 		System.out.println("All stacks poped. Program will exit");
-		capturer.stop();
+		supplier.stop();
 	}
 	
 	public static void main(String[] args) {
 		AppContext context = new AppContext();
-		System.out.println("Waiting for window...");
 		context.start();
-		System.out.println("Message loop started.");
 	}
 }
