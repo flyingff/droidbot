@@ -9,7 +9,7 @@ import net.flyingff.ui.PicFrame;
 public class TMain {
 
 	private static PicFrame pf;
-	public static void main(String[] args) throws Exception {
+	public static void notmain(String[] args) throws Exception {
 		WindowCapturer wcap = new WindowCapturer();
 		ADBCommander cmd = new ADBCommander();
 		EventQueue.invokeAndWait(()->{
