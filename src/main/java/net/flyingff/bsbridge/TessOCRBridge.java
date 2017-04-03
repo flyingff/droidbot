@@ -3,20 +3,23 @@ package net.flyingff.bsbridge;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.util.Arrays;
 import java.util.Collections;
-
-import javax.imageio.ImageIO;
 
 import net.flyingff.util.TempFile;
 import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 
-public class OCRBridge {
-	public static final OCRBridge INST = new OCRBridge();
+public class TessOCRBridge implements IOCRBridge {
+	private static TessOCRBridge INST;
+	public static final IOCRBridge inst() {
+		if(INST == null) {
+			INST = new TessOCRBridge();
+		}
+		return INST;
+	}
 	private final ITesseract t;
-	private OCRBridge () {
+	private TessOCRBridge () {
 		File dataPath = TempFile.extractTempClasspathResources("net.flyingff.bsbridge.tessdata", "tsconfig__/tessdata", x->true);
 		
 		t = new Tesseract();

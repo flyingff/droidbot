@@ -9,10 +9,11 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
+import net.flyingff.bsbridge.IOCRBridge;
 import net.flyingff.bsbridge.ImageFinder;
-import net.flyingff.bsbridge.OCRBridge;
 
 public class TestTrace {
 	
@@ -24,14 +25,15 @@ public class TestTrace {
 		g.fillRect(0, 0, 50, 25);
 		g.setColor(Color.black);
 		g.drawString("123", 5, 20);
-		for(int i = 0; i < 3; i++) {
+		for(int i = 0; i < 300; i++) {
 			long tm = System.currentTimeMillis();
-			String result = OCRBridge.INST.ocrOneLineDigits(bi, new Rectangle(1, 1, 26, 26));
+			String result = IOCRBridge.INST().ocrOneLineDigits(bi, new Rectangle(1, 1, 26, 26));
 			System.out.println("OCR time=" + (System.currentTimeMillis() - tm));
-			Assert.assertEquals(result, "123");
+			Assert.assertEquals("123", result);
 		}
 	}
 	@Test
+	@Ignore
 	public void testPicFind() throws Exception{
 		BufferedImage big = ImageIO.read(TestTrace.class.getClassLoader().getResourceAsStream("big.png"));
 		BufferedImage part = ImageIO.read(TestTrace.class.getClassLoader().getResourceAsStream("sample.png"));
