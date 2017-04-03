@@ -11,6 +11,7 @@ import javax.imageio.ImageIO;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
+import com.sun.jna.Platform;
 
 import net.flyingff.util.TempFile;
 
@@ -28,19 +29,26 @@ public class ImageFinder {
 	private static final GaussianFilterLib lib;
 	static {
 		GaussianFilterLib lb = null;
-		try {
-			File tmpDll = TempFile.createTempFile("__gaussian_filter__.dll");
-			byte[] data = new byte[65536];
-			int len;
-			try(FileOutputStream fos = new FileOutputStream(tmpDll);
-				InputStream is = GaussianFilterLib.class.getResourceAsStream("jna/GaussianFilter.dll")) {
-				while((len = is.read(data)) > 0) {
-					fos.write(data, 0, len);
+		if(Platform.isWindows()) {
+			try {
+				File tmpDll = TempFile.createTempFile("__gaussian_filter__.dll");
+				byte[] data = new byte[65536];
+				int len;
+				try(FileOutputStream fos = new FileOutputStream(tmpDll);
+					InputStream is = GaussianFilterLib.class.getResourceAsStream("jna/GaussianFilter.dll")) {
+					while((len = is.read(data)) > 0) {
+						fos.write(data, 0, len);
+					}
 				}
+				lb = (GaussianFilterLib) Native.loadLibrary(tmpDll.getAbsolutePath(), GaussianFilterLib.class);
+			} catch(Exception e) {
+				System.err.println("Failed to load gaussian lib:");
+				e.printStackTrace();
 			}
-			lb = (GaussianFilterLib) Native.loadLibrary(tmpDll.getAbsolutePath(), GaussianFilterLib.class);
-		} catch(Exception e) {
-			e.printStackTrace();
+		}
+		if(lb == null) {
+			// 1563 in c, 1774 in java
+			lb = new GaussianFilterLibFFImpl();
 		}
 		lib = lb;
 	}
