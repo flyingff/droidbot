@@ -10,4 +10,8 @@ droidbot/out/
 droidbot/gradelw
 droidbot/gradelw.bat
 
+.gradle/
+gradle
+gradlew
+gradlew.bat
 .idea
