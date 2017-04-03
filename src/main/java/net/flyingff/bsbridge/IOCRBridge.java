@@ -11,7 +11,7 @@ public interface IOCRBridge {
 		if(Platform.isWindows()) {
 			return TessOCRBridge.inst();
 		} else {
-			return AspriceOCRBridge.inst();
+			return null;
 		}
 	}
 }

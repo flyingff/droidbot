@@ -9,7 +9,6 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import net.flyingff.bsbridge.IOCRBridge;
@@ -33,7 +32,6 @@ public class TestTrace {
 		}
 	}
 	@Test
-	@Ignore
 	public void testPicFind() throws Exception{
 		BufferedImage big = ImageIO.read(TestTrace.class.getClassLoader().getResourceAsStream("big.png"));
 		BufferedImage part = ImageIO.read(TestTrace.class.getClassLoader().getResourceAsStream("sample.png"));
