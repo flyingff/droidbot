@@ -46,11 +46,8 @@ public class ImageFinder {
 	}
 	
 	private final float[] gaussianTemp;
-	//private final int w, h;
 	private final int[] data, buf;
 	public ImageFinder(int tempR, float sigma, int maxW, int maxH) {
-		//this.w = maxW;
-		//this.h = maxH;
 		data = new int[maxW * maxH];
 		buf = new int[data.length];
 		gaussianTemp = new float[tempR * 2 + 1];

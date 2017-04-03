@@ -12,7 +12,9 @@ import java.util.List;
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.IDevice;
 
-public class ADBCommander {
+import net.flyingff.framework.ICommander;
+
+public class ADBCommander implements ICommander {
 	private static final int OP_DOWN = 1, OP_MOVE = 3, OP_UP = 2;
 	private static void waitDeviceList(AndroidDebugBridge bridge) {
 		int count = 0;
