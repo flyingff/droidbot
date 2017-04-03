@@ -13,7 +13,7 @@ public class InitializerFSM extends AbstractFinateStateMachine {
 	@Override
 	protected String createStates(IAppContext context) {
 		registState("start", hint->{
-			context.registService(IAnnouncementService.class, new AnnouncementService());
+			context.registryService(IAnnouncementService.class, new AnnouncementService());
 			System.out.println("Actived.");
 			hint.next("2");
 		});

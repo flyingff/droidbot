@@ -38,7 +38,7 @@ public class AppContext implements IAppContext {
 			} else {
 				throw new RuntimeException("Platform not supported: " + Platform.getOSType() + "(platform code in JNA)");
 			}
-			pFSM.load(AppContext.class.getResourceAsStream(fsmPropName));
+			pFSM.load(AppContext.class.getClassLoader().getResourceAsStream(fsmPropName));
 			for(Object o : pFSM.keySet()) {
 				String name = (String) o;
 				if(STARTER.equals(name)) {
@@ -74,12 +74,12 @@ public class AppContext implements IAppContext {
 	}
 	@SuppressWarnings("unchecked")
 	public <T> T getServices(String name) {
-		return (T)servicesByType.get(name);
+		return (T)servicesByName.get(name);
 	}
-	public <T> void registService(Class<? super T> clazz, T obj) {
+	public <T> void registryService(Class<? super T> clazz, T obj) {
 		servicesByType.put(clazz, obj);
 	}
-	public <T> void registService(String name, T obj) {
+	public <T> void registryService(String name, T obj) {
 		servicesByName.put(name, obj);
 	}
 	
@@ -92,7 +92,7 @@ public class AppContext implements IAppContext {
 				if(field.getAnnotation(Inject.class) != null) {
 					field.setAccessible(true);
 					Named named = field.getAnnotation(Named.class);
-					Object toInj = null;
+					Object toInj;
 					if(named == null) {
 						toInj = servicesByType.get(field.getType());
 					} else {
@@ -140,7 +140,7 @@ public class AppContext implements IAppContext {
 	public <T> T getPulse() {
 		return (T) pulse;
 	}
-	public void active() {
+	private void active() {
 		boolean running = true;
 		while(running) {
 			AbstractFinateStateMachine fsm = fsmStack.peek();

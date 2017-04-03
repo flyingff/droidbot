@@ -4,6 +4,7 @@ import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Arrays;
+import java.util.Collections;
 
 import javax.imageio.ImageIO;
 
@@ -21,7 +22,7 @@ public class OCRBridge {
 		t = new Tesseract();
 		t.setDatapath(dataPath.getAbsolutePath());
 		t.setPageSegMode(8);
-		t.setConfigs(Arrays.asList("digits"));
+		t.setConfigs(Collections.singletonList("digits"));
 	}
 	
 	public String ocrOneLineDigits(BufferedImage img, Rectangle rect) {
@@ -34,7 +35,7 @@ public class OCRBridge {
 		return raw.replaceAll("[^0-9]", "");
 	}
 	
-	public static void main(String[] args) throws Exception {
+	/*public static void main(String[] args) throws Exception {
 		BufferedImage bi = ImageIO.read(new File("d:\\x.png"));
 		for(int i = 0; i < 100; i++) {
 			long tm = System.currentTimeMillis();
@@ -42,5 +43,5 @@ public class OCRBridge {
 			System.out.print(result + ", ");
 			System.out.println(System.currentTimeMillis() - tm);
 		}
-	}
+	}*/
 }

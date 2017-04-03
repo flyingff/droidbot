@@ -5,5 +5,9 @@ droidbot/.settings/
 droidbot/Tess4J-3.3.1_src.zip
 droidbot/.gradle
 droidbot/build/
+droidbot/gradle/
+droidbot/out/
+droidbot/gradelw
+droidbot/gradelw.bat
 
 .idea
