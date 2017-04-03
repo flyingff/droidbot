@@ -10,6 +10,7 @@ droidbot/out/
 droidbot/gradelw
 droidbot/gradelw.bat
 
+.gitconfig
 .gradle/
 gradle
 gradlew
