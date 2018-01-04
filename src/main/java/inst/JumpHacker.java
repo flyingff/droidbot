@@ -6,11 +6,10 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.Point;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.image.BufferedImage;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
+import java.util.function.IntBinaryOperator;
 import java.util.function.Supplier;
 
 import javax.swing.JFrame;
@@ -29,13 +28,12 @@ public class JumpHacker {
 	private static double msPerPixel = 5.5;
 	public static void main(String[] args) throws Exception {
 		ADBCommander cmd = new ADBCommander();
-		SliderFrame sf = new SliderFrame(msPerPixel, x->msPerPixel = x);
-		
+
 		BufferedImage first = cmd.capture(false, SCALE);
 		
 		DoubleConsumer jump = d -> {
 			int tm = (int) (d * msPerPixel + 40);
-			System.out.println("Time = " + tm + "ms");
+			System.out.println("dist = " + (int)d + "px, hold time = " + tm + "ms");
 			cmd.press(downX * SCALE, downY * SCALE, tm);
 		};
 		EventQueue.invokeAndWait(()->{
@@ -52,18 +50,6 @@ public class JumpHacker {
 					jump.accept(d);
 				}
 			}, e->{ });
-			
-			Point posMainWindow = pf.getLocation();
-			sf.setLocation(posMainWindow.x + pf.getWidth() + 5, posMainWindow.y);
-			
-			pf.addComponentListener(new ComponentAdapter() {
-
-				@Override
-				public void componentMoved(ComponentEvent e) {
-					Point posMainWindow = pf.getLocation();
-					sf.setLocation(posMainWindow.x + pf.getWidth() + 5, posMainWindow.y);
-				}
-			});
 		});
 		Point last = null;
 		@SuppressWarnings("unchecked")
@@ -72,11 +58,10 @@ public class JumpHacker {
 			BufferedImage img = cmd.capture(false, 4);
 			if(img != null) {
 				Point pt = Analyzer.markHead(img, jumper);
-				if(pt != null && pt.equals(last)) {
+				boolean j;
+				if(j = (pt != null && pt.equals(last))) {
 					Point pTarget = jumper[0].get();
 					jump.accept(pTarget.distance(pt));
-					System.out.println("Jump, and rest for 5 seconds");
-					Thread.sleep(3000);
 				}
 				last = pt;
 				jumper[0] = null;
@@ -84,6 +69,7 @@ public class JumpHacker {
 				EventQueue.invokeLater(()->{
 					pf.setPic(img);
 				});
+				if(j) Thread.sleep(3000);
 			} else {
 				EventQueue.invokeLater(()->{
 					pf.setPic(null);
@@ -119,33 +105,78 @@ class SliderFrame extends JFrame {
 	}
 }
 class Analyzer {
+	private static final boolean[][] MARK = new boolean[270][540];
+	private static final void clearMark() {
+		for(int i = 0; i < 270; i++) {
+			for(int j = 0; j < 540; j++) {
+				MARK[i][j] = false;
+			}
+		}
+		maxMX = maxMY = -1;
+		minMX = minMY = 0xFFFF;
+	}
+	private static IntBinaryOperator dfsDeeper;
+	private static int maxMX, minMX, maxMY, minMY;
 	public static Point markHead(BufferedImage img, Supplier<Point>[] jumper) {
 		int w = img.getWidth(), h = img.getHeight();
 		int ref = 0x504977, refBG = img.getRGB(w - 1, h / 2);
 		
-		int maxX = -1, maxY = -1, minX = 0xFFFF, minY = 0xFFFF;
+		int threashold = 3;
+		int minDist = 0xFFFF;
 		
-		for(int x = w / 6, xTo = w * 5 / 6; x < xTo; x++) {
-			for(int y = h / 3, yTo = h * 2 / 3; y < yTo; y++) {
-				if(dist(ref, img.getRGB(x, y)) <= 3) {
-					if(x > maxX) { maxX = x; }
-					if(x < minX) { minX = x; }
-					if(y > maxY) { maxY = y; }
-					if(y < minY) { minY = y; }
+		int maxX = -1, maxY = -1, minX = 0xFFFF, minY = 0xFFFF;
+		while(maxX == -1) {
+			for(int x = w / 6, xTo = w * 5 / 6; x < xTo; x++) {
+				for(int y = h / 3, yTo = h * 2 / 3; y < yTo; y++) {
+					int dist = dist(ref, img.getRGB(x, y));
+					if(dist <= threashold) {
+						if(x > maxX) { maxX = x; }
+						if(x < minX) { minX = x; }
+						if(y > maxY) { maxY = y; }
+						if(y < minY) { minY = y; }
+					}
+					if(dist < minDist) { minDist = dist; }
 				}
 			}
+			threashold = minDist;
 		}
-		if(maxX > 0) {
-			Graphics g = img.getGraphics();
-			g.setColor(Color.red);
-			g.drawRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
-			g.dispose();
-			
-			final int peopleX = (maxX + minX) / 2;
-			jumper[0] = () -> markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, peopleX);
-			return new Point((minX + maxX) / 2, maxY + 24);
+		
+		// DFS for full-body
+		clearMark();
+		dfsDeeper = (x, y) -> {
+			int color = img.getRGB(x, y);
+			for(int i = -1; i <= 1; i += 2) {
+				for(int j = -1; j <= 1; j += 2) {
+					int px = x + i, py = y + j;
+					if(px < 0 || px >= 270 || py < 0 || py >= 540) continue;
+					if(MARK[px][py]) continue;
+					if(dist(color, img.getRGB(px, py)) <= 30) {
+						MARK[px][py] = true;
+						if(px > maxMX) { maxMX = px; }
+						if(px < minMX) { minMX = px; }
+						if(py > maxMY) { maxMY = py; }
+						if(py < minMY) { minMY = py; }
+						dfsDeeper.applyAsInt(px, py);
+					}
+				}
+			}
+			return 0;
+		};
+		dfsDeeper.applyAsInt(maxX, maxY);
+		/*
+		if(Math.abs((maxMX - minMX) - (maxMY - minMY)) < 8) {
+			maxMY += 32;
 		}
-		return null;
+		*/
+		
+		Graphics g = img.getGraphics();
+		g.setColor(Color.red);
+		g.drawRect(minMX, minMY, maxMX - minMX + 1, maxMY - minMY + 1);
+		g.dispose();
+		
+		final int peopleX = (maxMX + minMX) / 2;
+		jumper[0] = () -> markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, peopleX);
+		return null; // new Point((minMX + maxMX) / 2, maxMY - 6);
 	}
 	
 	private static float[] v = new float[3], vBG = new float[3];
@@ -168,8 +199,9 @@ class Analyzer {
 							firstXMax = firstX = secondX = x;
 							firstY = secondY = y;
 							left = firstX < peopleX;
-							// XXX debug output
-							System.out.println(firstX + "," + peopleX + ", toLeft: " + left);
+							// debug output
+							// System.out.println(firstX + "," + peopleX + ", toLeft: " + left);
+							System.out.print("Jump to " + (left ? "left" : "right") + ", ");
 						} else {
 							firstXMax = x;
 						}
