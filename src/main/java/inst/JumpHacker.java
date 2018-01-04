@@ -108,7 +108,7 @@ class Analyzer {
 		
 		for(int x = w / 6, xTo = w * 5 / 6; x < xTo; x++) {
 			for(int y = h / 3, yTo = h * 2 / 3; y < yTo; y++) {
-				if(dist(ref, img.getRGB(x, y)) <= 50) {
+				if(dist(ref, img.getRGB(x, y)) <= 3) {
 					if(x > maxX) { maxX = x; }
 					if(x < minX) { minX = x; }
 					if(y > maxY) { maxY = y; }
@@ -117,7 +117,7 @@ class Analyzer {
 			}
 		}
 		if(maxX > 0) {
-			markTarget(img, 2, h / 6, w - 2, h * 2 / 3, refBG, (maxX + minX) / 2);
+			markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, (maxX + minX) / 2);
 		
 			Graphics g = img.getGraphics();
 			g.setColor(Color.red);
@@ -127,12 +127,13 @@ class Analyzer {
 	}
 	
 	private static float[] v = new float[3], vBG = new float[3];
-	public static void markTarget(BufferedImage img, int minX, int minY, int maxX, int maxY, int refBG, int peopleX) {
+	public static Point markTarget(BufferedImage img, int minX, int minY, int maxX, int maxY, int refBG, int peopleX) {
 		Color.RGBtoHSB(((refBG >> 16) & 0xFF), ((refBG >> 8) & 0xFF), (refBG & 0xFF), vBG);
-		int firstX = -1, firstY = -1, firstXMax = -1, secondY = -1;
+		int firstX = -1, firstY = -1, firstXMax = -1, secondX = -1, secondY = -1;
+		int firstToEqualY = -1, lastToEqualY = -1;
 		boolean left = false;
 		for(int y = minY; y <= maxY; y++) {
-			int rowMinY = 0xFFFF, rowMaxY = -1;
+			int rowMinX = 0xFFFF, rowMaxX = -1;
 			for(int x = minX; x <= maxX; x++) {
 				int c = img.getRGB(x, y);
 				Color.RGBtoHSB(((c >> 16) & 0xFF), ((c >> 8) & 0xFF), (c & 0xFF), v);
@@ -142,32 +143,63 @@ class Analyzer {
 						Math.abs(vBG[1] - v[1]) < 0.1f)) {
 					if((firstX == -1 || y == firstY) && Math.abs(x - peopleX) > 18) {
 						if(firstX == -1) {
-							firstXMax = firstX = x;
+							firstXMax = firstX = secondX = x;
 							firstY = secondY = y;
 							left = firstX < peopleX;
+							// XXX debug output
 							System.out.println(firstX + "," + peopleX + ", toLeft: " + left);
 						} else {
 							firstXMax = x;
 						}
 						img.setRGB(x, y, 0x0000FF);
-					} else if((left && x < firstX && x + 4 < peopleX) ||
+					} else { 
+						if((left && x < firstX && x + 4 < peopleX) ||
 							(!left && x > firstXMax && x - 4 > peopleX)){
-						if(y < rowMinY) rowMinY = y;
-						if(y > rowMaxY) rowMaxY = y;
-						img.setRGB(x, y, 0x00FF00);
+							if(x < rowMinX) rowMinX = x;
+							if(x > rowMaxX) rowMaxX = x;
+						}
+						//img.setRGB(x, y, 0x00FF00);
 					}
 				}
-				if(left && rowMinY < secondY) {
-					secondY = rowMinY;
-				} else if (!left && rowMaxY > secondY) {
-					secondY = rowMaxY;
-				} else break;
+			}
+			if(firstY != -1 && y > firstY) {
+				if(left && rowMinX <= secondX) {
+					if(rowMinX == secondX) {
+						lastToEqualY = y;
+						if(firstToEqualY == -1) {
+							firstToEqualY = y;
+						}
+					}
+					secondX = rowMinX;
+				} else if (!left && rowMaxX >= secondX) {
+					if(rowMaxX == secondX) {
+						lastToEqualY = y;
+						if(firstToEqualY == -1) {
+							firstToEqualY = y;
+						}
+					}
+					secondX = rowMaxX;
+				} else {break;};
+				secondY = y;
 			}
 		}
-		
 		if(firstX != -1) {
-			img.setRGB((firstX + firstXMax) / 2, secondY, 0xFF00FF);
+			int targetX = (firstX + firstXMax) / 2, targetY;
+			if(firstToEqualY != -1) {
+				if(lastToEqualY - firstToEqualY > 10) {
+					// considered as cubic
+					targetY = firstToEqualY - 1;
+				} else {
+					// considered as round
+					targetY = (firstToEqualY + lastToEqualY) / 2;
+				}
+			} else {
+				targetY = secondY;
+			}
+			img.setRGB(targetX, targetY, 0xFF00FF);
+			return new Point(targetX, targetY);
 		}
+		return null;
 	}
 	
 	private static float[] hsv1 = new float[3];
