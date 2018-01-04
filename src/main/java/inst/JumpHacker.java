@@ -10,6 +10,8 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.image.BufferedImage;
 import java.util.function.Consumer;
+import java.util.function.DoubleConsumer;
+import java.util.function.Supplier;
 
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -23,13 +25,19 @@ import net.flyingff.ui.PicFrame;
 public class JumpHacker {
 	private static final int SCALE = 4;
 	private static PicFrame pf;
-	private static int downX, downY;
-	private static double msPerPixel = 5.8;
+	private static int downX = 10, downY = 10;
+	private static double msPerPixel = 5.5;
 	public static void main(String[] args) throws Exception {
 		ADBCommander cmd = new ADBCommander();
 		SliderFrame sf = new SliderFrame(msPerPixel, x->msPerPixel = x);
 		
 		BufferedImage first = cmd.capture(false, SCALE);
+		
+		DoubleConsumer jump = d -> {
+			int tm = (int) (d * msPerPixel + 40);
+			System.out.println("Time = " + tm + "ms");
+			cmd.press(downX * SCALE, downY * SCALE, tm);
+		};
 		EventQueue.invokeAndWait(()->{
 			pf = new PicFrame(first.getWidth(), first.getHeight(),
 			e->{ 
@@ -41,8 +49,7 @@ public class JumpHacker {
 				if(d < 10) {
 					cmd.tap(downX * SCALE, downY * SCALE);
 				} else {
-					System.out.println("Time = " + d * msPerPixel + "ms");
-					cmd.press(downX * SCALE, downY * SCALE, (int) (d * msPerPixel));
+					jump.accept(d);
 				}
 			}, e->{ });
 			
@@ -58,10 +65,22 @@ public class JumpHacker {
 				}
 			});
 		});
+		Point last = null;
+		@SuppressWarnings("unchecked")
+		Supplier<Point>[] jumper = new Supplier[1];
 		while(true) {
 			BufferedImage img = cmd.capture(false, 4);
 			if(img != null) {
-				Analyzer.markHead(img);
+				Point pt = Analyzer.markHead(img, jumper);
+				if(pt != null && pt.equals(last)) {
+					Point pTarget = jumper[0].get();
+					jump.accept(pTarget.distance(pt));
+					System.out.println("Jump, and rest for 5 seconds");
+					Thread.sleep(3000);
+				}
+				last = pt;
+				jumper[0] = null;
+				
 				EventQueue.invokeLater(()->{
 					pf.setPic(img);
 				});
@@ -100,7 +119,7 @@ class SliderFrame extends JFrame {
 	}
 }
 class Analyzer {
-	public static void markHead(BufferedImage img) {
+	public static Point markHead(BufferedImage img, Supplier<Point>[] jumper) {
 		int w = img.getWidth(), h = img.getHeight();
 		int ref = 0x504977, refBG = img.getRGB(w - 1, h / 2);
 		
@@ -117,13 +136,16 @@ class Analyzer {
 			}
 		}
 		if(maxX > 0) {
-			markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, (maxX + minX) / 2);
-		
 			Graphics g = img.getGraphics();
 			g.setColor(Color.red);
 			g.drawRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
 			g.dispose();
+			
+			final int peopleX = (maxX + minX) / 2;
+			jumper[0] = () -> markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, peopleX);
+			return new Point((minX + maxX) / 2, maxY + 24);
 		}
+		return null;
 	}
 	
 	private static float[] v = new float[3], vBG = new float[3];
