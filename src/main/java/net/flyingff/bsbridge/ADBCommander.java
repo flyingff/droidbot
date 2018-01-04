@@ -1,21 +1,19 @@
 package net.flyingff.bsbridge;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.IDevice;
+import com.android.ddmlib.IShellOutputReceiver;
+import com.android.ddmlib.RawImage;
 
 import net.flyingff.framework.ICommander;
 
-public class ADBCommander implements ICommander {
-	private static final int OP_DOWN = 1, OP_MOVE = 3, OP_UP = 2;
+public class ADBCommander implements ICommander, IShellOutputReceiver {
+	private static final int OP_TAP = 1, OP_SWIPE = 2;
 	private static void waitDeviceList(AndroidDebugBridge bridge) {
 		int count = 0;
 		for (; count < 300 && bridge.hasInitialDeviceList() == false; count++) {
@@ -25,18 +23,26 @@ public class ADBCommander implements ICommander {
 			System.err.println("Log. Device: Timeout");
 		}
 	}
-	private static class PtOperation {
-		public int x, y, op;
+	private static class TouchOperation {
+		public int x, y, x1, y1, op, tm;
 
-		public PtOperation(int x, int y, int op) {
-			super();
+		private TouchOperation(int x, int y) {
 			this.x = x;
 			this.y = y;
-			this.op = op;
+			this.op = OP_TAP;
+		}
+		private TouchOperation(int x, int y, int x1, int y1, int tm) {
+			this.x = x;
+			this.y = y;
+			this.x1 = x1;
+			this.y1 = y1;
+			this.tm = tm;
+
+			this.op = OP_SWIPE;
 		}
 	}
 	
-	private List<PtOperation> operations = new LinkedList<>();
+	private List<TouchOperation> operations = new LinkedList<>();
 	private IDevice device;
 	
 	public ADBCommander() {
@@ -59,23 +65,9 @@ public class ADBCommander implements ICommander {
 		}
 	}
 	
-	private File fKey;
 	private void messageLoop() {
-		RandomAccessFile raf = null;
 		try {
-			fKey = File.createTempFile("key", "");
-			fKey.deleteOnExit();
-		} catch (Exception e) { throw new RuntimeException(e); }
-		
-		// DEBUG
-		// System.out.println("key=" + fKey);
-		
-		String fPath = fKey.getAbsolutePath();
-		ByteBuffer buffer = ByteBuffer.allocate(65536);
-		buffer.order(ByteOrder.LITTLE_ENDIAN);
-		try {
-			raf = new RandomAccessFile(fPath, "rw");
-			List<PtOperation> ops = new ArrayList<>();
+			List<TouchOperation> ops = new ArrayList<>();
 			for(;;) {
 				ops.clear();
 				// seek
@@ -92,99 +84,90 @@ public class ADBCommander implements ICommander {
 						operations.clear();
 					}
 				}
-				/*   
-				 *  // down 
-				 *  cmds.add("sendevent /dev/input/event8 3 53 " + op.x * 0x7fff / width);
-						cmds.add("sendevent /dev/input/event8 3 54 " + op.y * 0x7fff / height);
-						cmds.add("sendevent /dev/input/event8 0 2 0");
-						cmds.add("sendevent /dev/input/event8 0 0 0");
-						// up
-						cmds.add("sendevent /dev/input/event8 0 2 0");
-						cmds.add("sendevent /dev/input/event8 0 0 0");
-				 */
 				// execute tasks in order
-				buffer.clear();
-				for(PtOperation op : ops) {
+				for(TouchOperation op : ops) {
 					switch(op.op) {
-					case OP_DOWN:
-					case OP_MOVE:
-						buffer.putInt(0); buffer.putInt(0);
-						buffer.putShort((short)3);buffer.putShort((short)53); buffer.putInt(op.x);
-						buffer.putInt(0); buffer.putInt(0);
-						buffer.putShort((short)3);buffer.putShort((short)54); buffer.putInt(op.y);
-					case OP_UP:
-						buffer.putInt(0); buffer.putInt(0);
-						buffer.putShort((short)0);buffer.putShort((short)2); buffer.putInt(0);
-						buffer.putInt(0); buffer.putInt(0);
-						buffer.putShort((short)0);buffer.putShort((short)0); buffer.putInt(0);
+					case OP_SWIPE:
+						device.executeShellCommand(String.format("input swipe %d %d %d %d %d",
+								op.x, op.y, op.x1, op.y1, op.tm), this);
 						break;
+					case OP_TAP:
+						device.executeShellCommand(String.format("input tap %d %d",
+								op.x, op.y), this);
+						break;
+						default: throw new AssertionError(op.op);
 					}
 				}
-				int len = buffer.position();
-				raf.setLength(len);
-				raf.seek(0);
-				raf.write(buffer.array(), 0, len);
-				device.pushFile(fPath, "/dev/input/event8");
 			}
 		}catch(Exception e) {
 			e.printStackTrace();
-			if(raf != null) try { raf.close(); } catch (IOException e1) { }
 		}
+		
 	}
-	
-	public void mouseDown(int x, int y) {
+	public void tap(int x, int y) {
 		synchronized (operations) {
-			operations.add(new PtOperation(x, y, OP_DOWN));
+			operations.add(new TouchOperation(x, y));
 			operations.notify();
 		}
 	}
-	public void mouseUp(int x, int y) {
+	public void press(int x, int y, int tm) {
 		synchronized (operations) {
-			operations.add(new PtOperation(x, y, OP_UP));
+			operations.add(new TouchOperation(x, y, x, y, tm));
 			operations.notify();
 		}
 	}
-	public void mouseMove(int x, int y) {
+	public void swipe(int x0, int y0, int x1, int y1, int tm) {
 		synchronized (operations) {
-			operations.add(new PtOperation(x, y, OP_MOVE));
+			operations.add(new TouchOperation(x0, y0, x1, y1, tm));
 			operations.notify();
 		}
 	}
-	
-	/*public static void main(String[] args) throws Exception {
-		RandomAccessFile raf = new RandomAccessFile("d:\\key", "rw");
-		MappedByteBuffer buf = raf.getChannel().map(MapMode.READ_WRITE, 0, 96);
-		buf.order(ByteOrder.LITTLE_ENDIAN);
-		for(int i = 0; i < 300; i++) {
-			long tmStart = System.currentTimeMillis();
-			buf.putShort(8, (short) 3);
-			buf.putShort(10, (short) 53);
-			buf.putInt(12, 2457);
+	public BufferedImage capture(boolean landscape, int sample) {
+		try {
+			RawImage raw = device.getScreenshot();
+
+			if (raw == null) {
+				return null;
+			}
 			
-			buf.putShort(24, (short) 3);
-			buf.putShort(26, (short) 54);
-			buf.putInt(28, 22572);
+			int w = (landscape ? raw.height : raw.width) / sample;
+			int h = (landscape ? raw.width : raw.height) / sample;
 			
-			buf.putShort(40, (short) 0);
-			buf.putShort(42, (short) 2);
-			buf.putInt(44, 0);
+			BufferedImage ret = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
 			
-			buf.putShort(56, (short) 0);
-			buf.putShort(58, (short) 0);
-			buf.putInt(60, 0);
-			
-			buf.putShort(72, (short) 0);
-			buf.putShort(74, (short) 2);
-			buf.putInt(76, 0);
-			
-			buf.putShort(88, (short) 0);
-			buf.putShort(90, (short) 0);
-			buf.putInt(92, 0);
-			
-			System.out.println(System.currentTimeMillis() - tmStart);
-			Thread.sleep(1000);
+			int index = 0;
+			int indexInc = raw.bpp >> 3;
+			if (landscape) {
+				for (int y = 0; y < raw.height; y += sample) {
+					for (int x = 0; x < raw.width; x += sample, index += indexInc * sample) {
+						ret.setRGB(y / sample, (raw.width - x - 1) / sample, raw.getARGB(index));
+					}
+				}
+			} else {
+				for (int y = 0; y < raw.height; y += sample) {
+					for (int x = 0; x < raw.width; x += sample, index += indexInc * sample) {
+						ret.setRGB(x / sample, y / sample, raw.getARGB(index));
+					}
+					index += indexInc * raw.width * (sample - 1);
+				}		
+			}
+			return ret;
+		} catch (Exception e) {
+			return null;
 		}
-		raf.close();
-	}*/
+	}
+
+	@Override
+	public void addOutput(byte[] data, int offset, int length) {
+		System.out.write(data, offset, length);
+	}
+	@Override
+	public void flush() {
+		System.out.flush();
+	}
+	@Override
+	public boolean isCancelled() {
+		return false;
+	}
 }
 

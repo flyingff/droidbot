@@ -1,7 +1,7 @@
 package net.flyingff.framework;
 
 public interface ICommander {
-	void mouseDown(int x, int y);
-	void mouseUp(int x, int y);
-	void mouseMove(int x, int y);
+	void tap(int x, int y);
+	void press(int x, int y, int tm);
+	void swipe(int x0, int y0, int x1, int y1, int tm);
 }
