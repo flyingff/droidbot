@@ -47,7 +47,7 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 	
 	public ADBCommander() {
 		try {
-			// start-up adb
+			// make sure start-up adb
 			Runtime.getRuntime().exec("adb start-server").waitFor();
 			
 			AndroidDebugBridge.initIfNeeded(true);
@@ -56,12 +56,16 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 			waitDeviceList(bridge);
 			
 			IDevice devices[] = bridge.getDevices();
+			if(devices == null || devices.length <= 0) {
+				throw new RuntimeException("No device connected.");
+			}
 			device = devices[0];
 			System.out.println("Log. Device=" + device.getName());
 			
 			new Thread(this::messageLoop).start();
 		} catch(Exception e) {
-			throw new RuntimeException(e);
+			e.printStackTrace();
+			System.exit(-1);
 		}
 	}
 	
@@ -142,6 +146,7 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 					for (int x = 0; x < raw.width; x += sample, index += indexInc * sample) {
 						ret.setRGB(y / sample, (raw.width - x - 1) / sample, raw.getARGB(index));
 					}
+					index += indexInc * raw.width * (sample - 1);
 				}
 			} else {
 				for (int y = 0; y < raw.height; y += sample) {
@@ -149,7 +154,7 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 						ret.setRGB(x / sample, y / sample, raw.getARGB(index));
 					}
 					index += indexInc * raw.width * (sample - 1);
-				}		
+				}
 			}
 			return ret;
 		} catch (Exception e) {
