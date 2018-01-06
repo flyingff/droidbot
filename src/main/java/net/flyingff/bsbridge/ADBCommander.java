@@ -1,9 +1,14 @@
 package net.flyingff.bsbridge;
 
+import java.awt.Graphics;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+
+import javax.imageio.ImageIO;
 
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.IDevice;
@@ -158,6 +163,42 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 			}
 			return ret;
 		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	private ThreadLocal<ByteBuffer> buffers = new ThreadLocal<ByteBuffer>() {
+		@Override
+		protected ByteBuffer initialValue() {
+			// 4M bytes per buffer, which is quiet sufficient.
+			return ByteBuffer.allocate(1024 *1024 * 4);
+		}
+	};
+	private IShellOutputReceiver capReceiver = new IShellOutputReceiver() {
+		@Override public boolean isCancelled() { return false; }
+		@Override public void flush() { }
+		@Override public void addOutput(byte[] data, int offset, int length) {
+			buffers.get().put(data, offset, length);
+		}
+	};
+	public BufferedImage capture2(int scale) {
+		try {
+			ByteBuffer buf = buffers.get();
+			buf.clear();
+			device.executeShellCommand("screencap -p", capReceiver);
+			buf.flip();
+			BufferedImage img = ImageIO.read(
+					new ByteArrayInputStream(buf.array(), 0, buf.limit()));
+			if(img != null && scale > 1) {
+				int w = img.getWidth() / scale, h = img.getHeight() / scale;
+				BufferedImage scaled = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+				Graphics g = scaled.getGraphics();
+				g.drawImage(img, 0, 0, w, h, 0, 0, w * scale, h * scale, null);
+				return scaled;
+			}
+			return img;
+		} catch (Exception e) {
+			e.printStackTrace();
 			return null;
 		}
 	}

@@ -6,8 +6,9 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.Point;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.image.BufferedImage;
-import java.util.function.Consumer;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.IntBinaryOperator;
 import java.util.function.Supplier;
@@ -15,6 +16,7 @@ import java.util.function.Supplier;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JSlider;
+import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -24,17 +26,27 @@ import net.flyingff.ui.PicFrame;
 public class JumpHacker {
 	private static final int SCALE = 4;
 	private static PicFrame pf;
+	private static SliderFrame sfK, sfB;
 	private static int downX = 10, downY = 10;
-	private static double msPerPixel = 5.2 /*4.8*/, b = 60 /*60*/;
+	private static Point last = null;
+	private static final boolean AUTO = System.currentTimeMillis() > 0;
+	private static long lastJumpTime = 0;
+	private static double  lastd = 0;
+	
 	public static void main(String[] args) throws Exception {
+		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+		
 		ADBCommander cmd = new ADBCommander();
 
-		BufferedImage first = cmd.capture(false, SCALE);
+		BufferedImage first = cmd.capture2(SCALE);
 		
 		DoubleBinaryOperator jump = (d, jitter) -> {
-			int tm = (int) ((d + (Math.random() - 0.5) * jitter) * msPerPixel + b);
-			System.out.println("\tdist = " + (int)d + "px, \thold time = " + tm + "ms");
+			double k = sfK.getValue(), b = sfB.getValue();
+			
+			int tm = (int) ((d + (Math.random() - 0.5) * jitter) * k + b);
+			System.out.println("dist = " + (int)d + "px, \thold time = " + tm + "ms");
 			cmd.press(downX * SCALE, downY * SCALE, tm);
+			lastJumpTime = System.currentTimeMillis();
 			return tm;
 		};
 		EventQueue.invokeAndWait(()->{
@@ -46,36 +58,76 @@ public class JumpHacker {
 				int dx = e.getX() - downX, dy = e.getY() - downY;
 				double d = Math.sqrt(dx * dx + dy * dy);
 				if(d < 10) {
-					cmd.tap(downX * SCALE, downY * SCALE);
+					if(last != null) {
+						jump.applyAsDouble(new Point(e.getX(), e.getY()).distance(last), 0);
+					} else {
+						cmd.tap(downX * SCALE, downY * SCALE);
+					}
 				} else {
 					jump.applyAsDouble(d, 0);
 				}
 			}, e->{ });
+			sfK = new SliderFrame("K", 5.2, 6, 4, 2);
+			sfK.toLeftOf(pf);
+			sfB = new SliderFrame("B", 60, 80, 40, 0);
+			sfB.toLeftOf(sfK);
 		});
-		Point last = null;
-		@SuppressWarnings("unchecked")
-		Supplier<Point>[] jumper = new Supplier[1];
+		
+		
 		while(true) {
-			BufferedImage img = cmd.capture(false, SCALE);
+			BufferedImage img = cmd.capture2(SCALE);
 			if(img != null) {
-				Point pt = Analyzer.markPerson(img, jumper);
-				int delay = -1;
-				if(pt != null && pt.equals(last)) {
-					Point pTarget = jumper[0].get();
-					downX = (int) (pt.x + Math.random() * 10);
-					downY = (int) (pt.y + Math.random() * 10);
-					delay = (int) jump.applyAsDouble(pTarget.distance(pt), 0);
+				if(Analyzer.detectGameOn(img)) {
+					FindInfo info = Analyzer.markPerson(img);
+					if(info.peoplePos != null) {
+						Point pTarget = null;
+						if(info.exactPos == null &&
+								AUTO &&
+								System.currentTimeMillis() - lastJumpTime > 6000 &&
+								info.peoplePos.equals(last)) {
+							pTarget = info.finder.get();
+						} else if(info.exactPos != null &&
+								System.currentTimeMillis() - lastJumpTime > 2100){
+							System.out.print("Jump To exact,\t");
+							pTarget = info.exactPos;
+						}
+						
+						if(pTarget != null) {
+							double d = pTarget.distance(info.peoplePos);
+							if(d == lastd) {							
+								// draw point info
+								Graphics g = img.getGraphics();
+								g.setColor(Color.blue);
+								g.fillOval(pTarget.x - 3, pTarget.y - 2, 6, 4);
+								g.setColor(Color.red);
+								g.fillOval(info.peoplePos.x - 3, info.peoplePos.y - 2, 6, 4);
+								g.setColor(Color.yellow);
+								g.drawLine(pTarget.x, pTarget.y, info.peoplePos.x, info.peoplePos.y);
+								g.dispose();
+								
+								downX = (int) (info.peoplePos.x + Math.random() * 10);
+								downY = (int) (info.peoplePos.y + Math.random() * 10);
+								
+								jump.applyAsDouble(d, 0);
+							}
+							lastd = d;
+						}
+					}
+					last = info.peoplePos;
+				} else {
+					System.err.println("Game not detected");
+					lastd = -1;
+					last = null;
+					lastJumpTime = 0;
 				}
-				last = pt;
-				jumper[0] = null;
-				
 				EventQueue.invokeLater(()->{
 					pf.setPic(img);
 				});
+				/*
 				if(delay > 0) {
-					pt = null;
-					Thread.sleep((long) (delay + 800 + Math.random() * 1500));
+					Thread.sleep((long) (delay + 800 + Math.random() * ));
 				}
+				*/
 				
 				// if(j) Thread.sleep((long) (Math.random() * 1500));
 			} else {
@@ -91,25 +143,65 @@ public class JumpHacker {
 
 class SliderFrame extends JFrame {
 	private static final long serialVersionUID = -3319464914283823579L;
-	public SliderFrame(double value, Consumer<Double> accepter) {
-		super("Ratio");
-		JSlider slider = new JSlider(JSlider.VERTICAL, 200, 800, (int) (value * 100));
+	private int p;
+	private double value, max, min;
+	private JSlider slider;
+	private JLabel lb;
+	public SliderFrame(String name, double value, double max, double min, int precision) {
+		super(name);
+		p = (int) Math.pow(10, precision);
+		this.max = max;
+		this.min = min;
+		slider = new JSlider(JSlider.VERTICAL, (int)(min * p), (int)(max * p),
+				(int) (value * p));
 		slider.setPreferredSize(new Dimension(80, 480));
 		add(slider,BorderLayout.CENTER);
-		JLabel lb = new JLabel(String.valueOf(value));
+		lb = new JLabel(String.valueOf(value));
 		add(lb, BorderLayout.NORTH);
 		
+		this.value = value;
 		slider.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent e) {
-				double v = slider.getValue() / 100.0;
-				lb.setText(String.valueOf(v));
-				accepter.accept(v);
+				SliderFrame.this.value = slider.getValue() / (double)p;
+				lb.setText(String.valueOf(SliderFrame.this.value));
 			}
 		});
 		
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		pack();
 		setVisible(true);
+	}
+	public double getValue() {
+		return value;
+	}
+	public void setValue(double value) {
+		if(value > max || value < min) throw new RuntimeException("Out of range.");
+		
+		int v = (int) (value * p);
+		this.value = value;
+		slider.setValue(v);
+		lb.setText(String.valueOf(value));
+	}
+	private void moveToLeftOf(JFrame frame) {
+		Point loc = frame.getLocation();
+		setLocation(loc.x + frame.getWidth() + 5, loc.y);
+		/*Arrays.stream(getComponentListeners()).forEach(it->{
+			it.componentMoved(null);
+		});
+		*/
+	}
+	public void toLeftOf(JFrame frame) {
+		moveToLeftOf(frame);
+		frame.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+				moveToLeftOf(frame);
+			}
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				moveToLeftOf(frame);
+			}
+		});
 	}
 }
 class Analyzer {
@@ -126,18 +218,21 @@ class Analyzer {
 	}
 	private static IntBinaryOperator dfsDeeper;
 	private static int maxMX, minMX, maxMY, minMY, dfsArea = 0;
-	public static Point markPerson(BufferedImage img, Supplier<Point>[] jumper) {
+	public static FindInfo markPerson(BufferedImage img) {
+		FindInfo info = new FindInfo();
 		int w = img.getWidth(), h = img.getHeight();
 		int ref = 0x504977, refBG = img.getRGB(w - 1, h / 2);
 		
 		int threashold = 3;
 		int minDist = 0xFFFF;
 		
-		int maxX = -1, maxY = -1, minX = 0xFFFF, minY = 0xFFFF;
+		int maxX = -1, maxY = -1, minX = 0xFFFF, minY = 0xFFFF, exactY = -1, exactX = -1;
 		while(maxX == -1) {
-			for(int x = w / 6, xTo = w * 5 / 6; x < xTo; x++) {
-				for(int y = h / 3, yTo = h * 2 / 3; y < yTo; y++) {
-					int dist = dist(ref, img.getRGB(x, y));
+			for(int y = h * 2 / 3 - 1, yTo = h / 3; y >= yTo; y--) {
+				int lastExactLeft = -1, lastExactRight = -1;
+				for(int x = w / 6, xTo = w * 5 / 6; x < xTo; x++) {
+					int rgb = img.getRGB(x, y) & 0xFFFFFF;
+					int dist = dist(ref, rgb);
 					if(dist <= threashold) {
 						if(x > maxX) { maxX = x; }
 						if(x < minX) { minX = x; }
@@ -145,9 +240,26 @@ class Analyzer {
 						if(y < minY) { minY = y; }
 					}
 					if(dist < minDist) { minDist = dist; }
+					if(rgb == 0xF5F5F5) {
+						if(lastExactRight == x - 1) {
+							lastExactRight = x;
+						} else {
+							lastExactLeft = lastExactRight = x;
+						}
+						img.setRGB(x, y, 0xFF00FF);
+					}
+				}
+				int d = lastExactRight - lastExactLeft;
+				if(8 <= d && d <= 9) {
+					exactY = y;
+					exactX = (lastExactLeft + lastExactRight) / 2;
 				}
 			}
 			threashold = minDist;
+		}
+		
+		if(exactX > 0) {
+			info.exactPos = new Point(exactX, exactY);
 		}
 		
 		// DFS for full-body
@@ -172,13 +284,17 @@ class Analyzer {
 			}
 			return 0;
 		};
+		try {
 		dfsDeeper.applyAsInt(maxX, maxY);
-		if(dfsArea < 10) return null;
+		} catch (StackOverflowError e) {
+			System.err.println("Stack overflow when DFS");
+			return info;
+		}
+		if(dfsArea < 10) return info;
 		
 		if(Math.abs((maxMX - minMX) - (maxMY - minMY)) < 8) {
 			maxMY += 36;
 		}
-		
 		
 		Graphics g = img.getGraphics();
 		g.setColor(Color.red);
@@ -186,8 +302,10 @@ class Analyzer {
 		g.dispose();
 		
 		final int peopleX = (maxMX + minMX) / 2;
-		jumper[0] = () -> markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, peopleX);
-		return new Point(peopleX, maxMY - 2);
+		info.finder = () -> markTarget(img, 2, h / 4, w - 2, h * 2 / 3, refBG, peopleX);
+		
+		info.peoplePos = new Point(peopleX, maxMY - 2);
+		return info;
 	}
 	
 	private static float[] v = new float[3], vBG = new float[3];
@@ -210,9 +328,7 @@ class Analyzer {
 							firstXMax = firstX = secondX = x;
 							firstY = secondY = y;
 							left = firstX < peopleX;
-							// debug output
-							// System.out.println(firstX + "," + peopleX + ", toLeft: " + left);
-							System.out.print("Jump to " + (left ? "left" : "right") + ", ");
+							System.out.print("Jump to " + (left ? "left" : "right") + ",\t");
 						} else {
 							firstXMax = x;
 						}
@@ -223,7 +339,6 @@ class Analyzer {
 							if(x < rowMinX) rowMinX = x;
 							if(x > rowMaxX) rowMaxX = x;
 						}
-						//img.setRGB(x, y, 0x00FF00);
 					}
 				}
 			}
@@ -261,7 +376,7 @@ class Analyzer {
 			} else {
 				targetY = secondY;
 			}
-			img.setRGB(targetX, targetY, 0xFF00FF);
+			
 			return new Point(targetX, targetY);
 		}
 		return null;
@@ -278,4 +393,25 @@ class Analyzer {
 				Math.abs(hsv1[2] - hsv2[2])) * 255);
 		return diff;
 	}
+	public static boolean detectGameOn(BufferedImage img) {
+		int w = img.getWidth();
+		int ref = img.getRGB(w / 2, 36) & 0xFFFFFF;
+		// bright > 128
+		if (Math.max(Math.max(((ref >> 16) & 0xFF), ((ref >> 8) & 0xFF)),
+				(ref & 0xFF)) < 128) {
+			return false;
+		}
+		// same color at line
+		for(int i = 0; i < w; i++) {
+			if((img.getRGB(i, 36) & 0xFFFFFF) != ref) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+class FindInfo {
+	public Point peoplePos;
+	public Point exactPos;
+	public Supplier<Point> finder;
 }
