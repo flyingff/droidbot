@@ -3,10 +3,15 @@ package net.flyingff.bsbridge;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import javax.imageio.ImageIO;
 
@@ -14,6 +19,7 @@ import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IShellOutputReceiver;
 import com.android.ddmlib.RawImage;
+import com.twilight.h264.player.H264StreamDecoder;
 
 import net.flyingff.framework.ICommander;
 
@@ -200,6 +206,42 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 		} catch (Exception e) {
 			e.printStackTrace();
 			return null;
+		}
+	}
+	
+	private ThreadLocal<IShellOutputReceiver> receiver = new ThreadLocal<>();
+	public void captureViaVideo(int w, int h, Consumer<BufferedImage> listener) {
+		try (PipedOutputStream pos = new PipedOutputStream();
+			PipedInputStream pis = new PipedInputStream(pos);){
+			String cmd = String.format(
+					"screenrecord --size %dx%d --time-limit %d --output-format=h264 -",
+					w, h, 180);
+			new Thread(new H264StreamDecoder(pis, origin->{
+				BufferedImage imgNew = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+			}, true)).start();
+			
+			receiver.set(new IShellOutputReceiver() {
+				@Override
+				public boolean isCancelled() {
+					return false;
+				}
+				@Override
+				public void flush() { }
+				@Override
+				public void addOutput(byte[] data, int offset, int length) {
+					// System.out.println("data received: " + length);
+					try {
+						pos.write(data, offset, length);
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+			while(true) {
+				device.executeShellCommand(cmd, receiver.get(), 16, TimeUnit.SECONDS);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
