@@ -3,15 +3,21 @@ package net.flyingff.bsbridge;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
 
@@ -217,7 +223,15 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 					"screenrecord --size %dx%d --time-limit %d --output-format=h264 -",
 					w, h, 180);
 			new Thread(new H264StreamDecoder(pis, origin->{
-				BufferedImage imgNew = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+				if(origin.getWidth() != w || origin.getHeight() != h) {
+					BufferedImage imgNew = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+					Graphics g = imgNew.getGraphics();
+					g.drawImage(origin, 0, 0, w, h, 0, 0, w, h, null);
+					g.dispose();
+					listener.accept(imgNew);
+				} else {
+					listener.accept(origin);
+				}
 			}, true)).start();
 			
 			receiver.set(new IShellOutputReceiver() {
@@ -256,6 +270,81 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 	@Override
 	public boolean isCancelled() {
 		return false;
+	}
+	
+	private class TextResopnseCollector implements IShellOutputReceiver {
+		private ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		private String str;
+		@Override
+		public void addOutput(byte[] data, int offset, int length) {
+			bos.write(data, offset, length);
+		}
+		@Override
+		public void flush() {
+			try {
+				str = bos.toString("utf-8");
+			} catch (UnsupportedEncodingException e) {
+				throw new RuntimeException(e);
+			}
+			bos.reset();
+		}
+		@Override
+		public boolean isCancelled() { return false; }
+		public String get() {
+			return str;
+		}
+	}
+	private ThreadLocal<TextResopnseCollector> respCollector = new ThreadLocal<TextResopnseCollector>() {
+		@Override protected TextResopnseCollector initialValue() { return new TextResopnseCollector(); }
+	};
+	
+	private void exec(String cmd) {
+		try {
+			device.executeShellCommand(cmd, this, 20, TimeUnit.SECONDS);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	private String execForResult(String cmd) {
+		try {
+			TextResopnseCollector coll;
+			device.executeShellCommand(cmd, coll = respCollector.get(), 20, TimeUnit.SECONDS);
+			return coll.get();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
+	public String whoAmI() {
+		return execForResult("whoami");
+	}
+	public Date readDate() {
+		String unix = execForResult("date +%s");
+		return new Date(Long.parseLong(unix.replaceAll("[\\r\\n\\\"]", "")) * 1000);
+	}
+	private static final SimpleDateFormat DATE_SET_FORMATTER = new SimpleDateFormat("MMddHHmmyyyy.ss");
+	public void setDate(Date d) {
+		exec(String.format("su -c date %s", DATE_SET_FORMATTER.format(d)));
+	}
+	public void launch(String pkg, String className) {
+		exec("am start " + pkg + "/" + className);
+	}
+
+	public void kill(String pkg) {
+		exec("am force-stop " + pkg);
+	}
+	
+	private static final Pattern PATTERN_TOP_ACTIVITY = Pattern.compile("topActivity=ComponentInfo\\{([^/]+)/([^/]+)\\}");
+	public String[] topActivity() {
+		Matcher mt = PATTERN_TOP_ACTIVITY.matcher(execForResult("am stack list"));
+		if(mt.find()) {
+			return new String[] {
+				mt.group(1),
+				mt.group(2)
+			};
+		} else {
+			return null;
+		}
 	}
 }
 

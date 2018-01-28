@@ -17,6 +17,8 @@ public class PicFrame extends JFrame{
 	private static final long serialVersionUID = 1L;
 	private final ImageIcon ic;
 	private final BufferedImage imgBlack;
+	private BufferedImage img;
+	
 	public PicFrame(int w, int h, Consumer<MouseEvent> onMouseDown, Consumer<MouseEvent> onMouseUp, Consumer<MouseEvent> onMouseDrag) {
 		super("Screen");
 		imgBlack = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
@@ -37,15 +39,15 @@ public class PicFrame extends JFrame{
 		MouseAdapter ma = new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent e) {
-				onMouseDown.accept(e);
+				if(onMouseDown != null) onMouseDown.accept(e);
 			}
 			@Override
 			public void mouseReleased(MouseEvent e) {
-				onMouseUp.accept(e);
+				if(onMouseUp != null) onMouseUp.accept(e);
 			}
 			@Override
 			public void mouseDragged(MouseEvent e) {
-				onMouseDrag.accept(e);
+				if(onMouseDrag != null) onMouseDrag.accept(e);
 			}
 		};
 		lb.addMouseListener(ma);
@@ -58,6 +60,10 @@ public class PicFrame extends JFrame{
 		} else {
 			ic.setImage(im);
 		}
+		this.img = im;
 		repaint();
+	}
+	public BufferedImage getPic() {
+		return img;
 	}
 }
