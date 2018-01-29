@@ -24,7 +24,7 @@ import net.flyingff.bsbridge.ADBCommander;
 import net.flyingff.ui.PicFrame;
 
 public class JumpHacker {
-	private static final int SCALE = 4;
+	private static final int SCALE = 2;
 	private static PicFrame pf;
 	private static SliderFrame sfK, sfB;
 	private static int downX = 10, downY = 10;
@@ -67,16 +67,16 @@ public class JumpHacker {
 					jump.applyAsDouble(d, 0);
 				}
 			}, e->{ });
-			sfK = new SliderFrame("K", 5.2, 6, 4, 2);
-			sfK.toLeftOf(pf);
-			sfB = new SliderFrame("B", 60, 80, 40, 0);
-			sfB.toLeftOf(sfK);
+			//sfK = new SliderFrame("K", 5.2, 6, 4, 2);
+			//sfK.toLeftOf(pf);
+			//sfB = new SliderFrame("B", 60, 80, 40, 0);
+			//sfB.toLeftOf(sfK);
 		});
 		
 		
 		while(true) {
 			BufferedImage img = cmd.capture2(SCALE);
-			if(img != null) {
+			if(System.currentTimeMillis() < 0 && img != null) {
 				if(Analyzer.detectGameOn(img)) {
 					FindInfo info = Analyzer.markPerson(img);
 					if(info.peoplePos != null) {
@@ -134,8 +134,8 @@ public class JumpHacker {
 				EventQueue.invokeLater(()->{
 					pf.setPic(null);
 				});
-				System.err.println("Failed to capture...");
-				Thread.sleep(1000);
+				//System.err.println("Failed to capture...");
+				//Thread.sleep(1000);
 			}
 		}
 	}

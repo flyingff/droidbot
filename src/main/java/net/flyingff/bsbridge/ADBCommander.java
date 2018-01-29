@@ -10,10 +10,7 @@ import java.io.PipedOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -30,37 +27,17 @@ import com.twilight.h264.player.H264StreamDecoder;
 import net.flyingff.framework.ICommander;
 
 public class ADBCommander implements ICommander, IShellOutputReceiver {
-	private static final int OP_TAP = 1, OP_SWIPE = 2;
+	private final IDevice device;
+	
 	private static void waitDeviceList(AndroidDebugBridge bridge) {
 		int count = 0;
 		for (; count < 300 && bridge.hasInitialDeviceList() == false; count++) {
 			try { Thread.sleep(100); count++; } catch (InterruptedException e) { }
 		}
 		if(count >= 300) {
-			System.err.println("Log. Device: Timeout");
+			throw new RuntimeException("Timeout when waiting for device list");
 		}
 	}
-	private static class TouchOperation {
-		public int x, y, x1, y1, op, tm;
-
-		private TouchOperation(int x, int y) {
-			this.x = x;
-			this.y = y;
-			this.op = OP_TAP;
-		}
-		private TouchOperation(int x, int y, int x1, int y1, int tm) {
-			this.x = x;
-			this.y = y;
-			this.x1 = x1;
-			this.y1 = y1;
-			this.tm = tm;
-
-			this.op = OP_SWIPE;
-		}
-	}
-	
-	private List<TouchOperation> operations = new LinkedList<>();
-	private IDevice device;
 	
 	public ADBCommander() {
 		try {
@@ -74,74 +51,36 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 			
 			IDevice devices[] = bridge.getDevices();
 			if(devices == null || devices.length <= 0) {
-				throw new RuntimeException("No device connected.");
+				throw new RuntimeException("No device detected.");
 			}
 			device = devices[0];
-			System.out.println("Log. Device=" + device.getName());
-			
-			new Thread(this::messageLoop).start();
+			System.out.println("Connected, device is " + device.getName());
 		} catch(Exception e) {
-			e.printStackTrace();
-			System.exit(-1);
-		}
-	}
-	
-	private void messageLoop() {
-		try {
-			List<TouchOperation> ops = new ArrayList<>();
-			for(;;) {
-				ops.clear();
-				// seek
-				synchronized (operations) {
-					if(operations.isEmpty()) {
-						try {
-							operations.wait();
-						} catch (InterruptedException e) { }
-					}
-					if(operations.isEmpty()) {
-						continue;
-					} else {
-						ops.addAll(operations);
-						operations.clear();
-					}
-				}
-				// execute tasks in order
-				for(TouchOperation op : ops) {
-					switch(op.op) {
-					case OP_SWIPE:
-						device.executeShellCommand(String.format("input swipe %d %d %d %d %d",
-								op.x, op.y, op.x1, op.y1, op.tm), this);
-						break;
-					case OP_TAP:
-						device.executeShellCommand(String.format("input tap %d %d",
-								op.x, op.y), this);
-						break;
-						default: throw new AssertionError(op.op);
-					}
-				}
+			if(e instanceof RuntimeException) {
+				throw (RuntimeException)e;
+			} else {
+				throw new RuntimeException(e);
 			}
-		}catch(Exception e) {
-			e.printStackTrace();
 		}
-		
 	}
+
 	public void tap(int x, int y) {
-		synchronized (operations) {
-			operations.add(new TouchOperation(x, y));
-			operations.notify();
-		}
+		execf("input tap %d %d", x, y);
 	}
 	public void press(int x, int y, int tm) {
-		synchronized (operations) {
-			operations.add(new TouchOperation(x, y, x, y, tm));
-			operations.notify();
-		}
+		execf("input swipe %d %d %d %d %d", x, y, x, y, tm);
 	}
 	public void swipe(int x0, int y0, int x1, int y1, int tm) {
-		synchronized (operations) {
-			operations.add(new TouchOperation(x0, y0, x1, y1, tm));
-			operations.notify();
-		}
+		execf("input swipe %d %d %d %d %d", x0, y0, x1, y1, tm);
+	}
+	public void back() {
+		exec("input keyevent 4");
+	}
+	public void home() {
+		exec("input keyevent 3");
+	}
+	public void power() {
+		exec("input keyevent 26");
 	}
 	public BufferedImage capture(boolean landscape, int sample) {
 		try {
@@ -243,7 +182,6 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 				public void flush() { }
 				@Override
 				public void addOutput(byte[] data, int offset, int length) {
-					// System.out.println("data received: " + length);
 					try {
 						pos.write(data, offset, length);
 					} catch (IOException e) {
@@ -298,6 +236,13 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 		@Override protected TextResopnseCollector initialValue() { return new TextResopnseCollector(); }
 	};
 	
+	private void execf(String cmd, Object... args) {
+		exec(String.format(cmd, args));
+	}
+	@SuppressWarnings("unused")
+	private String execfForResult(String cmd, Object... args) {
+		return execForResult(String.format(cmd, args));
+	}
 	private void exec(String cmd) {
 		try {
 			device.executeShellCommand(cmd, this, 20, TimeUnit.SECONDS);
@@ -324,7 +269,7 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 	}
 	private static final SimpleDateFormat DATE_SET_FORMATTER = new SimpleDateFormat("MMddHHmmyyyy.ss");
 	public void setDate(Date d) {
-		exec(String.format("su -c date %s", DATE_SET_FORMATTER.format(d)));
+		execf("su -c date %s", DATE_SET_FORMATTER.format(d));
 	}
 	public void launch(String pkg, String className) {
 		exec("am start " + pkg + "/" + className);

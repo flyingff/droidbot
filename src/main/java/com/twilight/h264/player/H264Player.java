@@ -6,15 +6,9 @@ import static com.twilight.h264.decoder.H264Context.NAL_SLICE;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Image;
-import java.awt.Point;
-import java.awt.Toolkit;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
-import java.awt.image.ColorModel;
-import java.awt.image.MemoryImageSource;
-import java.awt.image.WritableRaster;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
