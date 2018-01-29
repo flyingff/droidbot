@@ -2,9 +2,13 @@ package inst;
 
 import java.awt.EventQueue;
 import java.awt.image.BufferedImage;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import net.flyingff.bsbridge.ADBCommander;
 import net.flyingff.ui.PicFrame;
@@ -93,6 +97,18 @@ public class FrogTest {
 		}
 		private void delay(long tm) {
 			try { Thread.sleep(tm); } catch (InterruptedException e) { e.printStackTrace(); }
+		}
+		private boolean areaCheck(int x, int y, int r, int color) {
+			if(r < 0) r = -r;
+			color = color & 0xFFFFFF;
+			for(int dx = -r + 1; dx < r; dx++) {
+				for(int dy = -r + 1; dy < r; dy++) {
+					if((img.getRGB(x + dx, y + dy) & 0xFFFFFF) != color) {
+						return false;
+					}
+				}
+			}
+			return true;
 		}
 		
 		
@@ -207,7 +223,28 @@ public class FrogTest {
 					if(colorAt(150, 225) == 0x89959e) {
 						System.out.println("青蛙不在家，无需收拾行李~");
 					} else {
-						// TODO buy items for him...
+						System.out.print("进屋...");
+						tap(250, 500);
+						delay(2000);
+						System.out.println("买吃的...");
+						buyFood();
+						
+						System.out.print("打开背包...");
+						tap(50, 500);
+						delay(1000);
+						
+						fillItem(updateImage, 87, 238, "食物");
+						fillItem(updateImage, 180, 240, "护身符");
+						fillItem(updateImage, 105, 320, "装备1");
+						fillItem(updateImage, 160, 320, "装备2");
+						System.out.println("收拾好了！");
+						// confirm
+						if(colorAt(130, 365) == 0xFFFFFF) {
+							tap(130, 365);
+							delay(1000);
+						}
+						tap(232, 160);
+						delay(1000);
 					}
 					stage = Stage.DONE;
 					break;
@@ -253,6 +290,48 @@ public class FrogTest {
 			default: 
 				System.out.printf("Unknown color: %x\n", color);
 				return -1;
+			}
+		}
+		
+		protected void buyFood() {
+			// TODO continue here
+		}
+		protected void fillItem(Runnable updateImage, int x, int y, String name) {
+			updateImage.run();
+			if(!areaCheck(x, y, 5, 0x9BD6EE)) {
+				System.out.print("带上" + name + ".");
+				tap(x, y);
+				delay(1000);
+				
+				// swipe for a random distance
+				System.out.print(".");
+				double r = Math.random();
+				if(r > 0.1) {
+					swipe(140, 425, 140, 425 - (int) (r * 400), (int)(1000 * r));
+				}
+				delay(2000);
+				
+				// randomly choose an item, if present
+				System.out.print(".");
+				updateImage.run();
+				List<Integer> pts = IntStream.range(0, 12)
+						.mapToObj(Integer::valueOf)
+						.collect(Collectors.toList());
+				Collections.shuffle(pts);
+				while(!pts.isEmpty()) {
+					int posY = 185 + pts.get(0) * 20;
+					if(colorAt(220, posY) == 0xFFE09E) {
+						tap(220, posY);
+						break;
+					}
+					pts.remove(0);
+				}
+				// no any item found? just close.
+				if(pts.isEmpty()) {
+					tap(236, 126);
+				}
+				
+				delay(1000);
 			}
 		}
 	}
