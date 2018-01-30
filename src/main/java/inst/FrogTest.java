@@ -293,8 +293,41 @@ public class FrogTest {
 			}
 		}
 		
+		private static final String[] FOOD_NAME = {
+				"野葡萄烤饼 (10 草)",
+				"巨石三明治 (20 草)",
+				"南瓜百吉饼 (50 草)",
+				"乳蛋饼     (80 草)",
+				"艾蒿小麦饼 (100草)",
+				"辣葱饼     (100草)"
+		};
+		private static final int[][] FOOD_POSITION = {
+				{70, 185}, {200, 185},
+				{70, 320}, {200, 320}
+		};
 		protected void buyFood() {
-			// TODO continue here
+			int foodId = (int) (Math.random() * 6);
+			delay(500);
+			System.out.printf("买一个%s带路上吃吧~\n", FOOD_NAME[foodId]);
+			// 点进商店
+			tap(250, 470);
+			delay(2000);
+			if(foodId >= 4) {
+				tap(250, 260);
+				delay(1000);
+				foodId -= 4;
+			}
+			int[] pt = FOOD_POSITION[foodId];
+			tap(pt[0], pt[1]);
+			delay(500);
+			tap(pt[0], pt[1]);
+			delay(1000);
+			tap(93, 321);
+			delay(1000);
+			
+			// back to house
+			ac.back();
+			delay(2000);
 		}
 		protected void fillItem(Runnable updateImage, int x, int y, String name) {
 			updateImage.run();
