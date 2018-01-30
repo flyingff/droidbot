@@ -10,6 +10,13 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import javax.sound.sampled.DataLine;
+import javax.swing.JOptionPane;
+
 import net.flyingff.bsbridge.ADBCommander;
 import net.flyingff.ui.PicFrame;
 
@@ -33,7 +40,11 @@ public class FrogTest {
 
 		while(true) {
 			System.out.println("Start game activity...");
-			ac.launch(PACKAGE_NAME, ACTIVITY_NAME);
+			if(!fh.isGameForeground()) {
+				ac.launch(PACKAGE_NAME, ACTIVITY_NAME);
+			} else {
+				System.out.println("游戏已经运行,就不再重新打开了...");
+			}
 			
 			if(!fh.handle(pf::setPic)) {
 				System.out.println("Game ended by user, exit...");
@@ -113,6 +124,7 @@ public class FrogTest {
 		
 		
 		public void doGrass() {
+			System.out.println("收草...");
 			// slide to left
 			swipe(5, 100, 225, 100, 500);
 			delay(1000);
@@ -155,23 +167,24 @@ public class FrogTest {
 					break;
 				case HANDLE_MESSAGES:
 					if(hasNoDialog()) {
+						System.out.println("处理完所有的消息了...");
 						stage = hasAnimal ? Stage.FEED_ANIMALS : Stage.DO_GRASS;
 					} else {
 						int msg = handleMessages();
-						if(msg == 0) {
+						if(msg == 1) {
 							System.out.println("有新的写真到来，请注意查收！");
 							stage = Stage.HANDLE_PICTURE;
-						} else if (msg == 1) {
+						} else if (msg == 2) {
 							hasAnimal = true;
 						}
 					}
 					break;
 				case HANDLE_PICTURE:
 					// wait until no dialog present
-					if(hasNoDialog()) {
-						System.out.println("完成写真保存。");
-						stage = Stage.HANDLE_MESSAGES;
-					}
+					ding();
+					JOptionPane.showConfirmDialog(pf, "点我确定已完成写真处理哦！");
+					System.out.println("完成写真处理.");
+					stage = Stage.HANDLE_MESSAGES;
 					break;
 				case FEED_ANIMALS:
 					System.out.println("要给来访的小动物喂食了");
@@ -226,9 +239,11 @@ public class FrogTest {
 						System.out.print("进屋...");
 						tap(250, 500);
 						delay(2000);
-						System.out.println("买吃的...");
-						buyFood();
 						
+						if(!hasFood(updateImage)) {
+							System.out.print("买吃的...");
+							buyFood(updateImage);
+						}
 						System.out.print("打开背包...");
 						tap(50, 500);
 						delay(1000);
@@ -238,11 +253,17 @@ public class FrogTest {
 						fillItem(updateImage, 105, 320, "装备1");
 						fillItem(updateImage, 160, 320, "装备2");
 						System.out.println("收拾好了！");
+						
 						// confirm
+						updateImage.run();
 						if(colorAt(130, 365) == 0xFFFFFF) {
 							tap(130, 365);
 							delay(1000);
+						} else {
+							System.out.println(colorAt(130, 365));
 						}
+						
+						// close dialog
 						tap(232, 160);
 						delay(1000);
 					}
@@ -268,6 +289,21 @@ public class FrogTest {
 			return false;
 		}
 		
+		private void ding() {
+			new Thread(()->{
+				try {
+			       AudioInputStream audioInputStream = AudioSystem
+			             .getAudioInputStream(FrogTest.class.getClassLoader().getResourceAsStream("ding.wav"));
+			       AudioFormat audioFormat = audioInputStream.getFormat();
+			       DataLine.Info dataLineInfo = new DataLine.Info(Clip.class, audioFormat);
+			       Clip clip = (Clip) AudioSystem.getLine(dataLineInfo);
+			       clip.open(audioInputStream);
+			       clip.start();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}).start();
+		}
 		/** return true means a new picture comes. */
 		protected int handleMessages() {
 			int color;
@@ -282,11 +318,18 @@ public class FrogTest {
 			case 0xCBEBA6:
 				// 带了写真回来
 				tap(40, 40);
+				delay(200);
 				return 1;
 			case 0xf7d179:
 				System.out.println("有小伙伴来访啦");
 				tap(40, 40);
+				delay(200);
 				return 2;
+			case 0xF3BFCB:
+				System.out.println("青蛙出门/回家啦~");
+				tap(40, 40);
+				delay(200);
+				return 3;
 			default: 
 				System.out.printf("Unknown color: %x\n", color);
 				return -1;
@@ -305,10 +348,10 @@ public class FrogTest {
 				{70, 185}, {200, 185},
 				{70, 320}, {200, 320}
 		};
-		protected void buyFood() {
+		protected void buyFood(Runnable updateImage) {
 			int foodId = (int) (Math.random() * 6);
 			delay(500);
-			System.out.printf("买一个%s带路上吃吧~\n", FOOD_NAME[foodId]);
+			System.out.printf("买一个%s吧...", FOOD_NAME[foodId]);
 			// 点进商店
 			tap(250, 470);
 			delay(2000);
@@ -325,13 +368,31 @@ public class FrogTest {
 			tap(93, 321);
 			delay(1000);
 			
-			// back to house
+			// back to house, may be a tick was received.
+			// here use the same prediction as in yard
+			updateImage.run();
+			while(!hasNoDialog()) {
+				ac.back();
+				delay(2000);
+				updateImage.run();
+			}
+		}
+		protected boolean hasFood(Runnable updateImage) {
+			// open bag
+			tap(50, 500);
+			delay(1000);
+			
+			updateImage.run();
+			boolean hasFood = !areaCheck(87, 238, 5, 0x9BD6EE);
+			
+			// close bag
 			ac.back();
-			delay(2000);
+			delay(500);
+			return hasFood;
 		}
 		protected void fillItem(Runnable updateImage, int x, int y, String name) {
 			updateImage.run();
-			if(!areaCheck(x, y, 5, 0x9BD6EE)) {
+			if(areaCheck(x, y, 5, 0x9BD6EE)) {
 				System.out.print("带上" + name + ".");
 				tap(x, y);
 				delay(1000);
@@ -365,6 +426,8 @@ public class FrogTest {
 				}
 				
 				delay(1000);
+			} else {
+				System.out.printf("已经有%s了...", name);
 			}
 		}
 	}
