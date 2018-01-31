@@ -22,6 +22,7 @@ import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IShellOutputReceiver;
 import com.android.ddmlib.RawImage;
+import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.twilight.h264.player.H264StreamDecoder;
 
 import net.flyingff.framework.ICommander;
@@ -149,6 +150,10 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 			}
 			return img;
 		} catch (Exception e) {
+			if(e instanceof ShellCommandUnresponsiveException) {
+				// just retry
+				return capture2(scale);
+			}
 			e.printStackTrace();
 			return null;
 		}

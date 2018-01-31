@@ -2,6 +2,8 @@ package inst;
 
 import java.awt.EventQueue;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -10,6 +12,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -123,19 +126,36 @@ public class FrogTest {
 		}
 		
 		
-		public void doGrass() {
+		public void doGrass(Runnable updateImage) {
 			System.out.println("收草...");
 			// slide to left
 			swipe(5, 100, 225, 100, 500);
-			delay(1000);
+			delay(500);
 			// do grass
-			swipe(18, 315, 230, 315, 1000);
-			delay(1500);
-			swipe(18, 345, 230, 345, 1000);
-			delay(1500);
+			swipe(18, 305, 230, 305, 500);
+			delay(500);
+			updateImage.run();
+			if(!hasNoDialog()) {
+				tap(40, 40);
+				delay(200);
+			}
+			swipe(18, 325, 230, 325, 500);
+			delay(500);
+			updateImage.run();
+			if(!hasNoDialog()) {
+				tap(40, 40);
+				delay(200);
+			}
+			swipe(18, 345, 230, 345, 500);
+			delay(500);
+			updateImage.run();
+			if(!hasNoDialog()) {
+				tap(40, 40);
+				delay(200);
+			}
 			// slide to right
 			swipe(225, 100, 5, 100, 500);
-			delay(500);
+			delay(200);
 		}
 
 		
@@ -170,7 +190,7 @@ public class FrogTest {
 						System.out.println("处理完所有的消息了...");
 						stage = hasAnimal ? Stage.FEED_ANIMALS : Stage.DO_GRASS;
 					} else {
-						int msg = handleMessages();
+						int msg = handleMessages(updateImage);
 						if(msg == 1) {
 							System.out.println("有新的写真到来，请注意查收！");
 							stage = Stage.HANDLE_PICTURE;
@@ -213,7 +233,7 @@ public class FrogTest {
 					break;
 				case DO_GRASS:
 					delay(200);
-					doGrass();
+					doGrass(updateImage);
 					stage = Stage.VIEW_MAIL;
 					break;
 				case VIEW_MAIL:
@@ -259,8 +279,6 @@ public class FrogTest {
 						if(colorAt(130, 365) == 0xFFFFFF) {
 							tap(130, 365);
 							delay(1000);
-						} else {
-							System.out.println(colorAt(130, 365));
 						}
 						
 						// close dialog
@@ -304,32 +322,60 @@ public class FrogTest {
 				}
 			}).start();
 		}
+		private static final File FOLDER = new File("D:\\frog_img\\");
+		private void saveScreen() {
+			if(!FOLDER.exists()) {
+				FOLDER.mkdirs();
+			}
+			try {
+				ImageIO.write(img, "png", new File(FOLDER, System.currentTimeMillis() + ".png"));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 		/** return true means a new picture comes. */
-		protected int handleMessages() {
+		protected int handleMessages(Runnable capImage) {
 			int color;
 			switch(color = colorAt(20, 270)) {
 			case 0xB2DDEB:
-				// 带了特产回来
-				System.out.println("青蛙带来了特产哦");
+				// 带了特产回来?
 				tap(40, 40);
-				tap(130, 400);
-				delay(1000);
+				delay(500);
+				capImage.run();
+				if(colorAt(130, 395) == 0xFFFFFF) {
+					System.out.println("青蛙带来了特产哦~");
+					tap(130, 400);
+					delay(1000);
+				} else {
+					System.out.println("青蛙并没有带特产回来.");
+				}
 				return 0;
 			case 0xCBEBA6:
 				// 带了写真回来
 				tap(40, 40);
 				delay(200);
+				capImage.run();
+				saveScreen();
 				return 1;
 			case 0xf7d179:
-				System.out.println("有小伙伴来访啦");
+				System.out.println("有小伙伴来访啦.");
 				tap(40, 40);
 				delay(200);
 				return 2;
 			case 0xF3BFCB:
-				System.out.println("青蛙出门/回家啦~");
+				if(colorAt(245, 140) == 0x998A62) {
+					System.out.println("青蛙回家啦~");
+				} else {
+					System.out.println("青蛙出门啦~");
+				}
 				tap(40, 40);
 				delay(200);
 				return 3;
+			case 0xe5dcc0:
+				System.out.println("青蛙带来了路上的收获.");
+				tap(40, 40);
+				delay(200);
+				return 4;
 			default: 
 				System.out.printf("Unknown color: %x\n", color);
 				return -1;
@@ -399,11 +445,14 @@ public class FrogTest {
 				
 				// swipe for a random distance
 				System.out.print(".");
-				double r = Math.random();
+				// swipe item to top
+				swipe(140, 185, 140, 425, 500);
+				delay(300);
+				double r = Math.random() * 0.8;
 				if(r > 0.1) {
 					swipe(140, 425, 140, 425 - (int) (r * 400), (int)(1000 * r));
 				}
-				delay(2000);
+				delay(1000);
 				
 				// randomly choose an item, if present
 				System.out.print(".");
