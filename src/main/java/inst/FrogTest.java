@@ -98,10 +98,10 @@ public class FrogTest {
 			return img.getRGB(x, y) & 0xFFFFFF;
 		}
 		private boolean hasNoDialog() {
-			return (img.getRGB(30, 40) & 0xFFFFFF) == 0xE3DBC2;
+			return (img.getRGB(30, 31) & 0xFFFFFF) == 0xE3DBC2;
 		}
 		private boolean hasMoreDialog() {
-			return (img.getRGB(30, 40) & 0xFFFFFF) == 0x9F9A88;
+			return (img.getRGB(30, 31) & 0xFFFFFF) == 0x9F9A88;
 		}
 		private void swipe(int x0, int y0, int x1, int y1, int tm) {
 			ac.swipe(x0 * FACTOR, y0 * FACTOR, x1 * FACTOR, y1 * FACTOR, tm);
@@ -260,30 +260,38 @@ public class FrogTest {
 						tap(250, 500);
 						delay(2000);
 						
-						if(!hasFood(updateImage)) {
+						int status = checkBag(updateImage);
+						if(status == 2) {
 							System.out.print("买吃的...");
 							buyFood(updateImage);
 						}
-						System.out.print("打开背包...");
-						tap(50, 500);
-						delay(1000);
 						
-						fillItem(updateImage, 87, 238, "食物");
-						fillItem(updateImage, 180, 240, "护身符");
-						fillItem(updateImage, 105, 320, "装备1");
-						fillItem(updateImage, 160, 320, "装备2");
-						System.out.println("收拾好了！");
-						
-						// confirm
-						updateImage.run();
-						if(colorAt(130, 365) == 0xFFFFFF) {
-							tap(130, 365);
+						if(status != 0) {
+							System.out.print("打开背包...");
+							tap(50, 500);
 							delay(1000);
+							
+							if(status == 2) {
+								fillItem(updateImage, 87, 238, "食物", false);
+								fillItem(updateImage, 180, 240, "护身符", false);
+								fillItem(updateImage, 105, 320, "装备1", false);
+								fillItem(updateImage, 160, 320, "装备2", true);
+							}
+							System.out.println("收拾好了！");
+							
+							// confirm
+							updateImage.run();
+							if(colorAt(130, 365) == 0xFFFFFF) {
+								tap(130, 365);
+								delay(1000);
+							}
+							
+							// close bag
+							tap(232, 160);
+							delay(1000);
+						} else {
+							System.out.println("无需再收拾了~");
 						}
-						
-						// close dialog
-						tap(232, 160);
-						delay(1000);
 					}
 					stage = Stage.DONE;
 					break;
@@ -423,20 +431,30 @@ public class FrogTest {
 				updateImage.run();
 			}
 		}
-		protected boolean hasFood(Runnable updateImage) {
+		/**
+		 * 0 - bag was locked
+		 * 1 - food supplied
+		 * 2 - need to handle
+		 */
+		protected int checkBag(Runnable updateImage) {
 			// open bag
 			tap(50, 500);
 			delay(1000);
 			
 			updateImage.run();
-			boolean hasFood = !areaCheck(87, 238, 5, 0x9BD6EE);
+			int ret = 2;
+			if(colorAt(130, 365) != 0xFFFFFF) {
+				ret = 0;
+			} else if(!areaCheck(87, 238, 5, 0x9BD6EE)) {
+				ret = 1;
+			}
 			
 			// close bag
 			ac.back();
 			delay(500);
-			return hasFood;
+			return ret;
 		}
-		protected void fillItem(Runnable updateImage, int x, int y, String name) {
+		protected void fillItem(Runnable updateImage, int x, int y, String name, boolean toTop) {
 			updateImage.run();
 			if(areaCheck(x, y, 5, 0x9BD6EE)) {
 				System.out.print("带上" + name + ".");
@@ -446,8 +464,11 @@ public class FrogTest {
 				// swipe for a random distance
 				System.out.print(".");
 				// swipe item to top
-				swipe(140, 185, 140, 425, 500);
-				delay(300);
+				if(toTop) {
+					swipe(140, 185, 140, 425, 500);
+					delay(300);
+				}
+				
 				double r = Math.random() * 0.8;
 				if(r > 0.1) {
 					swipe(140, 425, 140, 425 - (int) (r * 400), (int)(1000 * r));
