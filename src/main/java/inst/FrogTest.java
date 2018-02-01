@@ -19,6 +19,7 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
 import javax.sound.sampled.DataLine;
 import javax.swing.JOptionPane;
+import javax.swing.UIManager;
 
 import net.flyingff.bsbridge.ADBCommander;
 import net.flyingff.ui.PicFrame;
@@ -30,6 +31,8 @@ public class FrogTest {
 	
 	private static PicFrame pf;
 	public static void main(String[] args) throws Exception {
+		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+
 		ADBCommander ac = new ADBCommander();
 		pf = new PicFrame(270, 540, ev->{
 			System.out.printf("(%d, %d) -> #%x\n", ev.getX(), 
@@ -192,7 +195,6 @@ public class FrogTest {
 					} else {
 						int msg = handleMessages(updateImage);
 						if(msg == 1) {
-							System.out.println("有新的写真到来，请注意查收！");
 							stage = Stage.HANDLE_PICTURE;
 						} else if (msg == 2) {
 							hasAnimal = true;
@@ -202,7 +204,9 @@ public class FrogTest {
 				case HANDLE_PICTURE:
 					// wait until no dialog present
 					ding();
-					JOptionPane.showConfirmDialog(pf, "点我确定已完成写真处理哦！");
+					ac.ding();
+					JOptionPane.showConfirmDialog(pf, "点我确定已完成写真处理哦！",
+							"提示", JOptionPane.YES_OPTION);
 					System.out.println("完成写真处理.");
 					stage = Stage.HANDLE_MESSAGES;
 					break;
@@ -297,11 +301,19 @@ public class FrogTest {
 					break;
 				case DONE:
 					System.out.println("干完活了，可以退出了~");
-					ac.back();
-					delay(1000);
-					tap(100, 310);
 					while(isGameForeground()) {
-						delay(500);
+						updateImage.run();
+						int i = 0;
+						while(colorAt(100, 310) != 0xFFFFFF) {
+							if(i++ % 3 == 2) {
+								ac.back();
+							}
+							delay(500);
+							updateImage.run();
+						}
+						delay(1000);
+						tap(100, 310);
+						delay(2500);
 					}
 					return true;
 				default:
@@ -362,8 +374,18 @@ public class FrogTest {
 				// 带了写真回来
 				tap(40, 40);
 				delay(200);
-				capImage.run();
-				saveScreen();
+				int i = 0;
+				while(true) {
+					i++;
+					capImage.run();
+					saveScreen();
+					if(colorAt(250, 275) == 0xFFFFFF) {
+						tap(250, 275);
+						delay(500);
+						capImage.run();
+					} else break;
+				}
+				System.out.println("蛙蛙寄来了" + i + "张写真！");
 				return 1;
 			case 0xf7d179:
 				System.out.println("有小伙伴来访啦.");
@@ -472,6 +494,7 @@ public class FrogTest {
 				double r = Math.random() * 0.8;
 				if(r > 0.1) {
 					swipe(140, 425, 140, 425 - (int) (r * 400), (int)(1000 * r));
+					delay(1000);
 				}
 				delay(1000);
 				

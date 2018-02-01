@@ -27,9 +27,40 @@ import com.twilight.h264.player.H264StreamDecoder;
 
 import net.flyingff.framework.ICommander;
 
-public class ADBCommander implements ICommander, IShellOutputReceiver {
+public class ADBCommander implements ICommander {
+	private static final IShellOutputReceiver RECEIVER_SILENT = new IShellOutputReceiver() {
+		@Override
+		public boolean isCancelled() {
+			return false;
+		}
+
+		@Override
+		public void flush() {
+		}
+
+		@Override
+		public void addOutput(byte[] data, int offset, int length) {
+		}
+	};
+	private static final IShellOutputReceiver RECEIVER_STD = new IShellOutputReceiver() {
+		@Override
+		public void addOutput(byte[] data, int offset, int length) {
+			System.out.write(data, offset, length);
+		}
+
+		@Override
+		public void flush() {
+		}
+
+		@Override
+		public boolean isCancelled() {
+			return false;
+		}
+	};
 	private final IDevice device;
 	
+	private boolean outputToStdOut = false;
+
 	private static void waitDeviceList(AndroidDebugBridge bridge) {
 		int count = 0;
 		for (; count < 300 && bridge.hasInitialDeviceList() == false; count++) {
@@ -38,6 +69,12 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 		if(count >= 300) {
 			throw new RuntimeException("Timeout when waiting for device list");
 		}
+	}
+	public void setOutputToStdOut(boolean outputToStdOut) {
+		this.outputToStdOut = outputToStdOut;
+	}
+	public boolean isOutputToStdOut() {
+		return outputToStdOut;
 	}
 	
 	public ADBCommander() {
@@ -202,19 +239,6 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 		}
 	}
 
-	@Override
-	public void addOutput(byte[] data, int offset, int length) {
-		System.out.write(data, offset, length);
-	}
-	@Override
-	public void flush() {
-		System.out.flush();
-	}
-	@Override
-	public boolean isCancelled() {
-		return false;
-	}
-	
 	private class TextResopnseCollector implements IShellOutputReceiver {
 		private ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		private String str;
@@ -250,7 +274,9 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 	}
 	private void exec(String cmd) {
 		try {
-			device.executeShellCommand(cmd, this, 20, TimeUnit.SECONDS);
+			device.executeShellCommand(cmd, outputToStdOut ? RECEIVER_STD : RECEIVER_SILENT, 20, TimeUnit.SECONDS);
+		} catch (ShellCommandUnresponsiveException e) {
+			exec(cmd);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
@@ -260,6 +286,8 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 			TextResopnseCollector coll;
 			device.executeShellCommand(cmd, coll = respCollector.get(), 20, TimeUnit.SECONDS);
 			return coll.get();
+		} catch (ShellCommandUnresponsiveException e) {
+			return execForResult(cmd);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
@@ -283,7 +311,9 @@ public class ADBCommander implements ICommander, IShellOutputReceiver {
 	public void kill(String pkg) {
 		exec("am force-stop " + pkg);
 	}
-	
+	public void ding() {
+		exec("am startservice -a net.flyingff.PLAY -c android.intent.category.DEFAULT");
+	}
 	private static final Pattern PATTERN_TOP_ACTIVITY = Pattern.compile("topActivity=ComponentInfo\\{([^/]+)/([^/]+)\\}");
 	public String[] topActivity() {
 		Matcher mt = PATTERN_TOP_ACTIVITY.matcher(execForResult("am stack list"));
